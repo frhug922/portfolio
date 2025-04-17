@@ -1,106 +1,55 @@
-# 상점 코드 설명
+### 📁 Shop_System
 
-**상점 시스템 (Unity UI 및 서버 연동)**
-
----
-
-## 📌 담당한 업무
-
-- 게임 내 **상점 UI 구성 및 기능 개발**
-    
-- 상품 구매 처리 (서버 연동 및 구매 팝업 처리)
-    
-- 탭별 상품 구성 및 UI 흐름 관리
-    
+상점 시스템은 유저가 다양한 재화를 구매하거나 패키지를 탐색할 수 있도록 구성된 UI 모듈입니다. 탭별 상품 구성, 구매 흐름 처리, 확률 정보 팝업 등 상점 전반의 기능을 담당합니다.
 
 ---
 
-## 🔨 사용 기술 및 환경
+## 💡 주요 기능
 
-|항목|상세 내용|
+- 상점 메인 UI 구성 및 초기 탭 설정
+    
+- 탭별 상품 목록 출력 (추천, 보석, 자원, 전투 아이템 등)
+    
+- 상품 선택 및 구매 요청 처리
+    
+- 상품 구매 후 UI 반영 및 알림 노출
+    
+- 구매 확률 정보, 특수 상품 팝업 등 UI 확장 처리
+    
+
+---
+
+## 🛠 사용 기술
+
+- Unity UI
+    
+- Coroutine을 이용한 시간 갱신 처리
+    
+- 서버 API 연동 (상품 구매, 재화 갱신 등)
+    
+- IAPManager 연동을 통한 결제 시스템 처리
+    
+- 다국어 텍스트 시스템 연동
+    
+
+---
+
+## 📂 구성 파일
+
+|파일명|설명|
 |---|---|
-|사용 언어|C#|
-|사용 엔진 및 툴|Unity|
-|주요 기술|Unity UI, Coroutine, 서버 통신 처리|
+|`ShopUIController.cs`|상점의 메인 흐름을 제어하며 탭, 상품 선택, 결제 연동 등을 관리|
+|`ShopGoods.cs`|일반 상품 UI 구성 요소 처리 (아이템, 구매 버튼 등)|
+|`ShopPackageGoods.cs`|패키지 상품 전용 구성 처리|
+|`ShopBannerGoods.cs`|상단 배너 UI 관련 처리|
+|`ShopPopupBuy.cs`|구매 완료 팝업 처리 및 결과 연출 담당|
+|`ShopPopupAvatar.cs`, `ShopPopupVIP.cs`|아바타, VIP 등 특수 상품 구매 팝업 구성|
+|`ShopContentsTabs.cs`|각 탭별 콘텐츠 구성 관리|
 
 ---
 
-## 📌 주요 코드 설명 (`ShopUIController.cs`)
+## 📌 특이사항
 
-### ① 탭 UI 관리
-
-- 상점의 각 탭(추천, 보석, 자원, 전투 아이템 등)을 관리
+- **상품 타입**에 따라 구매 방식과 UI 처리 흐름이 달라지며, 내부적으로 `TabType`, `ShopPopupType` 등을 통해 분기 처리합니다.
     
-- 탭 전환 및 상품 목록 업데이트
-    
-
-```csharp
-
-private void ToggleMain(TabType type) {
-    _mainType = type;
-    _mainTabs.SetActiveTab((int)_mainType);
-    RefreshUI();
-}
-
-```
-
-
----
-
-### ② 상품 구매 흐름 처리
-
-- 상품 선택 시 서버와의 연동을 통해 구매 처리
-    
-- 구매 결과에 따라 적절한 팝업을 노출
-    
-
-```csharp
-
-private void OnClick_Goods(int id) {
-    TPrice tprice = TPrices.Instance.Find(id);
-
-    if (!CheckAssetAmount(id) && ShopGoodsType.Jewel != tprice._shopGoodsType) {
-        PopupManager.Instance.ShowOKPopup("알림", "재화가 부족합니다.", null);
-        return;
-    }
-
-    if (_mainType == TabType.Jewel) {
-        GameDataManager.Instance.SetPurchaseType(PurchaseType.Normal);
-        WebHttp.Instance.RequestGooglePurchaseKey(() => {
-            IAPManager.Instance.BuyProductID(tprice._productID_ANDROID, () => {
-                _shopPopupBuy.SetShow(ShopPopupType.PurchaseComplete, id);
-                RefreshUI();
-            });
-        });
-    }
-}
-
-```
-
-
----
-
-### ③ 상품 구매 완료 후 처리
-
-- 구매 완료 후 아이템 추가 등 후속 처리
-    
-- 상품 유형에 따른 추가 처리 로직 포함
-    
-
-```csharp
-
-private void PurchaseComplete(int id) {
-    RefreshUI();
-
-    if (_mainType == TabType.Resource) {
-        TPrice tp = TPrices.Instance.Find(id);
-        if (tp._priceSubType == PriceSubType.ExpandTeamCapacity) {
-            PopupManager.Instance.ShowAnimNoticePopup(_noticeAnimTF, string.Format("팀 최대 보유량 증가: {0}->{1}", PlayerManager.Instance.RetainableMaxTeamCount - 1, PlayerManager.Instance.RetainableMaxTeamCount));
-        }
-    }
-}
-
-```
-
-
----
+- **IAPManager**를 통한 실제 결제 연동도 포함되어 있어, **인앱 결제 상품 처리**까지 직접 구현된 구조입니다.

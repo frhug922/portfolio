@@ -82,11 +82,9 @@ public class ClanWarUI : LobbyUIBase
     #region private fields
 
     private ClanData _clanData;
-    private MClanInfo _otherClanInfo;
-    private MClanInfo _myClanInfo;
-    private ClanWarProgressType clanWarProgressType;
+    private ClanWarInfoResponse _clanWarInfo;
+    private ClanWarProgressType _clanWarProgressType;
     private Coroutine _clanWarRestTimeCoroutine;
-    private MWarProgress _clanWarProgress;
     private List<MItem> _heroRewards = new();
     private List<MItem> _itemRewards = new();
 
@@ -101,11 +99,8 @@ public class ClanWarUI : LobbyUIBase
     public override void SetShow() {
         base.SetShow();
 
-        _clanData = PlayerManager.Instance.ClanData;
-        _otherClanInfo = GameDataManager.Instance.ClanWarInfo.vsClanInfo;
-        _myClanInfo = GameDataManager.Instance.ClanWarInfo.clanInfo;
-        clanWarProgressType = GameDataManager.Instance.GetClanWarProgress();
-        _clanWarProgress = GameDataManager.Instance.ClanWarInfo.warProgress;
+        _clanWarInfo = GameDataManager.Instance.ClanWarInfo;
+        _clanWarProgressType = GameDataManager.Instance.GetClanWarProgress();
 
         RefreshUI();
         StartUpdateClanWarTime();
@@ -123,68 +118,75 @@ public class ClanWarUI : LobbyUIBase
         SetText((int)TextType.NowWar, TStrings.Instance.FindString("Clan_29123"));
         SetText((int)TextType.AttendBefore, TStrings.Instance.FindString("Clan_29120"));
         SetText((int)TextType.WarGround, TStrings.Instance.FindString("Clan_29185"));
-        SetText((int)TextType.SliderL, _myClanInfo.m_point.ToString());
-        SetText((int)TextType.SliderR, _otherClanInfo.m_point.ToString());
+        SetText((int)TextType.SliderL, GameDataManager.Instance.ClanWarInfo.getPointInfo.m_total_point.ToString());
+        SetText((int)TextType.SliderR, GameDataManager.Instance.ClanWarInfo.getPointInfo.m_vs_total_point.ToString());
         SetText((int)TextType.ClanOur, _clanData._name);
-        SetText((int)TextType.ClanOther, _otherClanInfo.m_clanname);
+        SetText((int)TextType.ClanOther, _clanWarInfo.vsClanInfo.m_clanname);
         SetText((int)TextType.AttendAfter, TStrings.Instance.FindString("Clan_29120"));
 
-        if (ClanWarProgressType.MatchMakingReady == clanWarProgressType) {
+        if (ClanWarProgressType.MatchMakingReady == _clanWarProgressType) {
             SetText((int)TextType.TeamEdit, TStrings.Instance.FindString("TEAMEDIT_10003"));
             SetText((int)TextType.StartTImeToMatch, TStrings.Instance.FindString("Clan_29124"));
         }
-        else if (ClanWarProgressType.MatchMaking == clanWarProgressType) {
+        else if (ClanWarProgressType.MatchMaking == _clanWarProgressType) {
             SetText((int)TextType.TeamEdit, TStrings.Instance.FindString("TEAMEDIT_10003"));
             SetText((int)TextType.Matching, TStrings.Instance.FindString("Clan_29125"));
         }
-        else if (ClanWarProgressType.ClanMatching == clanWarProgressType) {
+        else if (ClanWarProgressType.ClanMatching == _clanWarProgressType) {
             SetText((int)TextType.TeamEdit, TStrings.Instance.FindString("TEAMEDIT_10003"));
             SetText((int)TextType.Matching, TStrings.Instance.FindString("Clan_29125"));
         }
-        else if (ClanWarProgressType.ReadyWar == clanWarProgressType) {
+        else if (ClanWarProgressType.ReadyWar == _clanWarProgressType) {
             SetText((int)TextType.TimeToStart, TStrings.Instance.FindString("Clan_29186"));
         }
-        else if (ClanWarProgressType.DeckCopying == clanWarProgressType) {
+        else if (ClanWarProgressType.DeckCopying == _clanWarProgressType) {
             SetText((int)TextType.TimeToStart, TStrings.Instance.FindString("Clan_29247"));
         }
-        else if (ClanWarProgressType.War == clanWarProgressType) {
+        else if (ClanWarProgressType.War == _clanWarProgressType) {
             SetText((int)TextType.TimeToStart, TStrings.Instance.FindString("Clan_29187"));
         }
-        else if (ClanWarProgressType.AfterWar == clanWarProgressType) {
+        else if (ClanWarProgressType.AfterWar == _clanWarProgressType) {
             SetText((int)TextType.TimeToStart, TStrings.Instance.FindString("Clan_29182"));
             SetText((int)TextType.WarTime, GameDataManager.Instance.GetClanWarResultToString());
         }
     }
 
     public override void RefreshUI() {
+        _clanData = PlayerManager.Instance.ClanData;
+
         UpdateContentsUI();
         UpdateTextsUI();
     }
 
     public void OnClick_ToggleAttend() {
-        if (IsClanWarAttend()) {
-            PopupManager.Instance.ShowOKCancelPopup(TStrings.Instance.FindString("Clan_29188"), TStrings.Instance.FindString("Clan_29126"), () => {
-                WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.NotAttend, () => {
-                    _onAndOffObjs[(int)ObjType.Check].SetActive(IsClanWarAttend());
-                    _onAndOffObjs[(int)ObjType.BeforeAttendCheck].SetActive(IsClanWarAttend());
-                });
-            });
-        }
-        else {
-            if (GameDataManager.Instance.ClanWarInfo.deckCards.Count < Common.teamMemberMax) {
-                GameDataManager.Instance.IsClanDefenceDeckEditFirst = true;
-                EditDefenceDeck(() => {
-                    WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.Attend, () => {
-                        _onAndOffObjs[(int)ObjType.Check].SetActive(IsClanWarAttend());
-                        _onAndOffObjs[(int)ObjType.BeforeAttendCheck].SetActive(IsClanWarAttend());
-                    });
+        if (IsClanWarAttend()) { // 클랜전 참가 상태일 때
+            if (ClanWarProgressType.None == _clanWarProgressType // 아무 상태도 아니거나
+                || ClanWarProgressType.MatchMaking == _clanWarProgressType // 클랜전 매치메이킹 직전이거나 
+                || ClanWarProgressType.MatchMakingReady == _clanWarProgressType) { //클랜전 준비상황이면
+                PopupManager.Instance.ShowOKCancelPopup(TStrings.Instance.FindString("Clan_29188"), TStrings.Instance.FindString("Clan_29126"), () => { // 다음에도 불참합니다.
+                    WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.NotAttend, RefreshUI);
                 });
             }
-            else {
-                WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.Attend, () => {
-                    _onAndOffObjs[(int)ObjType.Check].SetActive(IsClanWarAttend());
-                    _onAndOffObjs[(int)ObjType.BeforeAttendCheck].SetActive(IsClanWarAttend());
+            else { // 클랜전 매칭이 이미 시작됐을 때
+                PopupManager.Instance.ShowOKCancelPopup(TStrings.Instance.FindString("Clan_29188"), TStrings.Instance.FindString("Clan_29127"), () => { // 다음부터 불참합니다.
+                    WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.NotAttend, RefreshUI);
                 });
+            }
+        }
+        else { // 클랜전 불참 상태일 때 (클랜 자체가 불참이거나 개인이 불참)
+            if ((int)ClanWarAttendType.NotAttend == _clanData._isClanWarAttend) {// 아군 클랜이 클랜전 자체를 미참가상태일 때
+                PopupManager.Instance.ShowOKPopup(TStrings.Instance.FindString("Clan_29188"), TStrings.Instance.FindString("Clan_29255"), null);
+            }
+            else { // 아군 클랜이 클랜전은 참가했는데 본인이 참가신청 안했을 때
+                if (GameDataManager.Instance.ClanWarInfo.deckCards.Count < Common.teamMemberMax) { // 방어덱이 5명이 안차있을 때
+                    GameDataManager.Instance.IsClanDefenceDeckEditFirst = true; // 클랜방어덱 최초설정이고
+                    EditDefenceDeck(() => { // 방어덱 설정 후
+                        WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.Attend, RefreshUI); //참가상태 변경
+                    });
+                }
+                else { // 방어덱이 이미 설정돼있을 때
+                    WebHttp.Instance.RequestClanWarUserAttendChange(ClanWarAttendType.Attend, RefreshUI); // 참가상태 변경
+                }
             }
         }
     }
@@ -200,17 +202,17 @@ public class ClanWarUI : LobbyUIBase
     }
 
     public void OnClick_OurClanFlag() {
-        WebHttp.Instance.RequestClanInfo(_myClanInfo.m_clanId, LobbySceneUIManager.Instance.CurrentSubType);
+        WebHttp.Instance.RequestClanInfo(_clanWarInfo.clanInfo.m_clanId, LobbySceneUIManager.Instance.CurrentSubType);
     }
 
     public void OnClick_EnemyClanFlag() {
-        WebHttp.Instance.RequestClanInfo(_otherClanInfo.m_clanId, LobbySceneUIManager.Instance.CurrentSubType);
+        WebHttp.Instance.RequestClanInfo(_clanWarInfo.vsClanInfo.m_clanId, LobbySceneUIManager.Instance.CurrentSubType);
     }
 
     public void OnClick_ClanWarRule() {
         PopupManager.Instance.ShowTooltip(_tooltipTF[(int)ToolTipTFType.WarRule],
-            TSpecialRuleRotations.Instance.Find((BattleSpecialType)_clanWarProgress.m_war_property).LangTypeName,
-            TSpecialRules.Instance.Find((BattleSpecialType)_clanWarProgress.m_war_property).LangTypeDesc);
+            TSpecialRuleRotations.Instance.Find((BattleSpecialType)_clanWarInfo.warProgress.m_war_property).LangTypeName,
+            TSpecialRules.Instance.Find((BattleSpecialType)_clanWarInfo.warProgress.m_war_property).LangTypeDesc);
     }
 
     public void OnClick_WarBox() {
@@ -221,7 +223,7 @@ public class ClanWarUI : LobbyUIBase
             });
             return;
         }
-        PopupManager.Instance.ShowTooltip(_tooltipTF[(int)ToolTipTFType.WarBox], TStrings.Instance.FindString("Clan_29122"), TStrings.Instance.FindString("Clan_29167"));
+        PopupManager.Instance.ShowTooltip(_tooltipTF[(int)ToolTipTFType.WarBox], TStrings.Instance.FindString("Clan_29122"), string.Format(TStrings.Instance.FindString("Clan_29167"), GameDataManager.Instance.ClanWarInfo.clanWarBoxPer));
     }
 
     public void OnClick_Slider() {
@@ -241,17 +243,17 @@ public class ClanWarUI : LobbyUIBase
     #region private funcs
 
     private void UpdateContentsUI() {
-        if (ClanWarProgressType.MatchMakingReady == clanWarProgressType || ClanWarProgressType.MatchMaking == clanWarProgressType || ClanWarProgressType.ClanMatching == clanWarProgressType) {
+        if (ClanWarProgressType.MatchMakingReady == _clanWarProgressType || ClanWarProgressType.MatchMaking == _clanWarProgressType || ClanWarProgressType.ClanMatching == _clanWarProgressType) {
             _onAndOffObjs[(int)ObjType.BeforeMatching].SetActive(true);
             _onAndOffObjs[(int)ObjType.AfterMatching].SetActive(false);
-            _onAndOffObjs[(int)ObjType.MatchStartThing].SetActive(ClanWarProgressType.MatchMakingReady == clanWarProgressType);
-            _onAndOffObjs[(int)ObjType.MatchMakeThing].SetActive(ClanWarProgressType.MatchMakingReady != clanWarProgressType);
+            _onAndOffObjs[(int)ObjType.MatchStartThing].SetActive(ClanWarProgressType.MatchMakingReady == _clanWarProgressType);
+            _onAndOffObjs[(int)ObjType.MatchMakeThing].SetActive(ClanWarProgressType.MatchMakingReady != _clanWarProgressType);
         }
         else {
             _onAndOffObjs[(int)ObjType.AfterMatching].SetActive(true);
             _onAndOffObjs[(int)ObjType.BeforeMatching].SetActive(false);
 
-            SetClanIcon(ref _clanwarRuleIcon, string.Format("waricon{0:D2}", _clanWarProgress.m_war_property - 3));
+            SetClanIcon(ref _clanwarRuleIcon, string.Format("waricon{0:D2}", _clanWarInfo.warProgress.m_war_property - 3));
 
             SetClanFlag();
             SetWarPointSlider();
@@ -266,9 +268,9 @@ public class ClanWarUI : LobbyUIBase
         SetClanPattern(ref _ourClanFlagImage, TClanFlags.Instance.Find(_clanData._pattern)._pattern);
         SetClanSymbol(ref _ourClanSimbolImage, TClanFlags.Instance.Find(_clanData._symbol)._symbol);
 
-        if (0 != _otherClanInfo.m_clanId) {
-            SetClanPattern(ref _otherClanFlagImage, TClanFlags.Instance.Find(_otherClanInfo.m_pattern)._pattern);
-            SetClanSymbol(ref _otherClanSimbolImage, TClanFlags.Instance.Find(_otherClanInfo.m_mark)._symbol);
+        if (0 != _clanWarInfo.vsClanInfo.m_clanId) {
+            SetClanPattern(ref _otherClanFlagImage, TClanFlags.Instance.Find(_clanWarInfo.vsClanInfo.m_pattern)._pattern);
+            SetClanSymbol(ref _otherClanSimbolImage, TClanFlags.Instance.Find(_clanWarInfo.vsClanInfo.m_mark)._symbol);
         }
     }
 
@@ -284,24 +286,24 @@ public class ClanWarUI : LobbyUIBase
     }
 
     private bool IsClanWarAttend() {
-        ClanData clandata = PlayerManager.Instance.ClanData;
-
-        if (clandata._myClanUserInfo.m_attend_whether == (int)ClanWarAttendType.Attend) {
-            return true;
+        if ((int)ClanWarAttendType.NotAttend == _clanData._isClanWarAttend) {// 아군 클랜이 클랜전 자체를 미참가상태일 때
+            return false;
         }
-        return false;
+        else {
+            return _clanData._myClanUserInfo.m_attend_whether == (int)ClanWarAttendType.Attend;
+        }
     }
 
     private void SetWarPointSlider() {
-        int nowValue = _myClanInfo.m_point;
-        int maxValue = _myClanInfo.m_point + _otherClanInfo.m_point;
+        int nowValue = GameDataManager.Instance.ClanWarInfo.getPointInfo.m_total_point;
+        int maxValue = GameDataManager.Instance.ClanWarInfo.getPointInfo.m_total_point + GameDataManager.Instance.ClanWarInfo.getPointInfo.m_vs_total_point;
 
         if (0 == maxValue) {
             _slider.value = 0.5f;
             return;
         }
 
-        float amount = nowValue / maxValue;
+        float amount = (float)nowValue / (float)maxValue;
 
         if (amount < 0.1f) {
             amount = 0.1f;
@@ -339,25 +341,30 @@ public class ClanWarUI : LobbyUIBase
     }
 
     private void UpdateTime() {
-        if (ClanWarProgressType.MatchMakingReady == clanWarProgressType) {
+        if (ClanWarProgressType.MatchMakingReady == _clanWarProgressType) {
             TimeSpan timespan = Common.ConvertJavaMillisecondToDateTimeUTC(GameDataManager.Instance.ClanWarInfo.warProgress.m_open_time) - System.DateTime.UtcNow;
             SetText((int)TextType.TimeToMatch, string.Format(TStrings.Instance.FindString("SHOP_9035"), timespan.Hours, timespan.Minutes));
         }
-        else if (ClanWarProgressType.ReadyWar == clanWarProgressType) {
+        else if (ClanWarProgressType.ReadyWar == _clanWarProgressType) {
             TimeSpan timespan = Common.ConvertJavaMillisecondToDateTimeUTC(GameDataManager.Instance.ClanWarInfo.warProgress.m_war_ready_time) - System.DateTime.UtcNow;
             SetText((int)TextType.WarTime, string.Format(TStrings.Instance.FindString("SHOP_9035"), timespan.Hours, timespan.Minutes));
         }
-        else if (ClanWarProgressType.DeckCopying == clanWarProgressType) {
+        else if (ClanWarProgressType.DeckCopying == _clanWarProgressType) {
             TimeSpan timespan = Common.ConvertJavaMillisecondToDateTimeUTC(GameDataManager.Instance.ClanWarInfo.warProgress.m_war_ready_progress_time) - System.DateTime.UtcNow;
             SetText((int)TextType.WarTime, string.Format(TStrings.Instance.FindString("SHOP_9035"), timespan.Hours, timespan.Minutes));
         }
-        else if (ClanWarProgressType.War == clanWarProgressType) {
+        else if (ClanWarProgressType.War == _clanWarProgressType) {
             TimeSpan timespan = Common.ConvertJavaMillisecondToDateTimeUTC(GameDataManager.Instance.ClanWarInfo.warProgress.m_war_end_time) - System.DateTime.UtcNow;
             SetText((int)TextType.WarTime, string.Format(TStrings.Instance.FindString("SHOP_9035"), timespan.Hours, timespan.Minutes));
         }
     }
 
     private void EditDefenceDeck(System.Action callback = null) {
+        if ((int)ClanWarAttendType.NotAttend == _clanData._isClanWarAttend) { // 전쟁 미참가중이면
+            PopupManager.Instance.ShowOKPopup(TStrings.Instance.FindString("Clan_29000"), TStrings.Instance.FindString("Clan_29255"), null); // 이 클랜은 클랜 전쟁에 불참합니다.
+            return;
+        }
+
         SystemManager.Instance.SetBattleType(BattleType.ClanWar);
         LobbySceneUIManager.Instance.ClanWarDeckEditType = DeckType.Defence;
 
